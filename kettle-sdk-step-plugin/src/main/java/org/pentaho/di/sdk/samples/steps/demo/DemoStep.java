@@ -34,6 +34,20 @@ import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaInterface;
 
+import dev.langchain4j.data.document.Metadata;
+import dev.langchain4j.data.embedding.Embedding;
+import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.model.embedding.onnx.allminilml6v2.AllMiniLmL6V2EmbeddingModel;
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.store.embedding.EmbeddingMatch;
+import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
+import dev.langchain4j.store.embedding.EmbeddingSearchResult;
+import dev.langchain4j.store.embedding.EmbeddingStore;
+import dev.langchain4j.store.embedding.filter.Filter;
+import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
+
+import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey;
+
 /**
  * This class is part of the demo step plug-in implementation.
  * It demonstrates the basics of developing a plug-in step for PDI. 
@@ -125,6 +139,8 @@ public class DemoStep extends BaseStep implements StepInterface {
    */
   public boolean processRow( StepMetaInterface smi, StepDataInterface sdi ) throws KettleException {
 
+
+
     // safely cast the step settings (meta) and runtime info (data) to specific implementations 
     DemoStepMeta meta = (DemoStepMeta) smi;
     DemoStepData data = (DemoStepData) sdi;
@@ -159,6 +175,24 @@ public class DemoStep extends BaseStep implements StepInterface {
       }
     }
 
+    EmbeddingModel embeddingModel;
+    embeddingModel = new AllMiniLmL6V2EmbeddingModel();
+    EmbeddingStore<TextSegment> embeddingStore;
+    embeddingStore = PgVectorEmbeddingStore.builder()
+            .host("localhost")
+            .port(5432)
+            .database("postgres")
+            .user("postgres")
+            .password("postgres")
+            .table(meta.getOutputField())
+            .dimension(embeddingModel.dimension())
+            .dropTableFirst(true)
+            .build();
+
+    TextSegment segment1 = TextSegment.from(meta.getOutputField());
+    Embedding embedding1 = embeddingModel.embed(segment1).content();
+    embeddingStore.add(embedding1, segment1);
+
     // safely add the string "Hello World!" at the end of the output row
     // the row array will be resized if necessary 
     Object[] outputRow = RowDataUtil.resizeArray( r, data.outputRowMeta.size() );
@@ -167,13 +201,36 @@ public class DemoStep extends BaseStep implements StepInterface {
     // put the row to the output row stream
     putRow( data.outputRowMeta, outputRow );
 
-    // log progress if it is time to to so
+    // log progress if it is time to do so
     if ( checkFeedback( getLinesRead() ) ) {
       logBasic( BaseMessages.getString( PKG, "DemoStep.Linenr", getLinesRead() ) ); // Some basic logging
     }
 
     // indicate that processRow() should be called again
     return true;
+  }
+
+  public static class PgVectorEmbeddingStoreWithMetadataExample {
+
+    public static void main(String[] args) {
+      EmbeddingModel embeddingModel;
+      embeddingModel = new AllMiniLmL6V2EmbeddingModel();
+      EmbeddingStore<TextSegment> embeddingStore;
+      embeddingStore = PgVectorEmbeddingStore.builder()
+              .host("localhost")
+              .port(5432)
+              .database("postgres")
+              .user("postgres")
+              .password("postgres")
+              .table("vectorTestJavaMetadata")
+              .dimension(embeddingModel.dimension())
+              .dropTableFirst(true)
+              .build();
+
+      TextSegment segment1 = TextSegment.from("I like football.");
+      Embedding embedding1 = embeddingModel.embed(segment1).content();
+      embeddingStore.add(embedding1, segment1);
+    }
   }
 
   /**
